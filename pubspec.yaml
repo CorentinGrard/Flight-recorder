@@ -1,0 +1,38 @@
+name: glider_tracker
+description: A glider flight tracking app with GPS and accelerometer data
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Location & Sensors
+  geolocator: ^10.1.0
+  sensors_plus: ^4.0.2
+  permission_handler: ^11.0.1
+  
+  # Database
+  sqflite: ^2.3.0
+  path_provider: ^2.1.1
+  path: ^1.8.3
+  
+  # Utils
+  intl: ^0.19.0
+  share_plus: ^7.2.1
+  csv: ^5.1.1
+  
+  # UI
+  cupertino_icons: ^1.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.3.5
+
+flutter:
+  uses-material-design: true
