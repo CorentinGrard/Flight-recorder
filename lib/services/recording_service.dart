@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:geolocator/geolocator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../models/flight_models.dart';
 import 'database_service.dart';
 
@@ -75,6 +76,13 @@ class RecordingService {
     _isRecording = false;
     _stopListening();
 
+    // Disable wake lock
+    try {
+      await WakelockPlus.disable();
+    } catch (e) {
+      print('Failed to disable wakelock: $e');
+    }
+
     // Save any remaining buffered data
     if (_dataBuffer.isNotEmpty) {
       await _saveBufferedData();
@@ -128,7 +136,7 @@ class RecordingService {
       cancelOnError: false,
     );
 
-    // Magnetometer for presure (~10 Hz)
+    // Magnetometer for heading (~10 Hz)
     _magnetometerSubscription = magnetometerEventStream(
       samplingPeriod: const Duration(milliseconds: 100), // ~10 Hz
     ).listen(
@@ -139,7 +147,7 @@ class RecordingService {
       cancelOnError: false,
     );
 
-    // Barometer for heading (~10 Hz)
+    // Barometer for presure (~1 Hz)
     _barometerSubscription = barometerEventStream(
       samplingPeriod: const Duration(seconds: 1), // ~1 Hz
     ).listen(

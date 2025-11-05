@@ -4,9 +4,10 @@ import 'package:latlong2/latlong.dart';
 import 'dart:math' as math;
 import '../models/flight_models.dart';
 import '../services/database_service.dart';
+import '../widgets/flight_3d_view.dart';
 
 enum VisualizationMode { speed, gForce }
-enum ViewMode { map2D, profile }
+enum ViewMode { map2D, profile, map3D }
 
 class FlightVisualizationScreen extends StatefulWidget {
   final int flightId;
@@ -110,10 +111,17 @@ class _FlightVisualizationScreenState extends State<FlightVisualizationScreen> {
               ButtonSegment(
                 value: ViewMode.map2D,
                 icon: Icon(Icons.map, size: 18),
+                label: Text('2D'),
+              ),
+              ButtonSegment(
+                value: ViewMode.map3D,
+                icon: Icon(Icons.threed_rotation, size: 18),
+                label: Text('3D'),
               ),
               ButtonSegment(
                 value: ViewMode.profile,
                 icon: Icon(Icons.show_chart, size: 18),
+                label: Text('Profile'),
               ),
             ],
             selected: {_viewMode},
@@ -135,41 +143,46 @@ class _FlightVisualizationScreenState extends State<FlightVisualizationScreen> {
                     // Mode toggle
                     Container(
                       padding: const EdgeInsets.all(8),
-                      color: Theme.of(context).colorScheme.surfaceVariant,
-                      child: Row(
-                        children: [
-                          const Text('Color by: '),
-                          const SizedBox(width: 8),
-                          SegmentedButton<VisualizationMode>(
-                            segments: const [
-                              ButtonSegment(
-                                value: VisualizationMode.speed,
-                                label: Text('Speed'),
-                                icon: Icon(Icons.speed, size: 16),
-                              ),
-                              ButtonSegment(
-                                value: VisualizationMode.gForce,
-                                label: Text('G-Force'),
-                                icon: Icon(Icons.trending_up, size: 16),
-                              ),
-                            ],
-                            selected: {_vizMode},
-                            onSelectionChanged: (Set<VisualizationMode> selection) {
-                              setState(() {
-                                _vizMode = selection.first;
-                              });
-                            },
-                          ),
-                          const Spacer(),
-                          _buildLegend(),
-                        ],
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            const Text('Color by: '),
+                            const SizedBox(width: 8),
+                            SegmentedButton<VisualizationMode>(
+                              segments: const [
+                                ButtonSegment(
+                                  value: VisualizationMode.speed,
+                                  label: Text('Speed'),
+                                  icon: Icon(Icons.speed, size: 16),
+                                ),
+                                ButtonSegment(
+                                  value: VisualizationMode.gForce,
+                                  label: Text('G-Force'),
+                                  icon: Icon(Icons.trending_up, size: 16),
+                                ),
+                              ],
+                              selected: {_vizMode},
+                              onSelectionChanged: (Set<VisualizationMode> selection) {
+                                setState(() {
+                                  _vizMode = selection.first;
+                                });
+                              },
+                            ),
+                            const SizedBox(width: 16),
+                            _buildLegend(),
+                          ],
+                        ),
                       ),
                     ),
                     // Visualization
                     Expanded(
                       child: _viewMode == ViewMode.map2D
                           ? _build2DMap()
-                          : _buildAltitudeProfile(),
+                          : _viewMode == ViewMode.map3D
+                              ? _build3DView()
+                              : _buildAltitudeProfile(),
                     ),
                   ],
                 ),
@@ -244,6 +257,15 @@ class _FlightVisualizationScreenState extends State<FlightVisualizationScreen> {
         PolylineLayer(polylines: polylines),
         MarkerLayer(markers: markers),
       ],
+    );
+  }
+
+  Widget _build3DView() {
+    if (_dataPoints.isEmpty) return const SizedBox();
+
+    return Flight3DView(
+      dataPoints: _dataPoints,
+      getColor: _getColorForPoint,
     );
   }
 
