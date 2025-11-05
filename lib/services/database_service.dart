@@ -22,6 +22,9 @@ class DatabaseService {
       path,
       version: 1,
       onCreate: _createDB,
+      onConfigure: (db) async {
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
     );
   }
 
@@ -36,7 +39,10 @@ class DatabaseService {
         total_distance REAL,
         max_positive_g REAL,
         max_negative_g REAL,
-        notes TEXT
+        max_speed REAL,
+        avg_speed REAL,
+        notes TEXT,
+        name TEXT
       )
     ''');
 
@@ -54,6 +60,7 @@ class DatabaseService {
         accel_z REAL,
         g_force REAL,
         heading REAL,
+        presure REAL,
         FOREIGN KEY (flight_id) REFERENCES flights (id) ON DELETE CASCADE
       )
     ''');
@@ -122,11 +129,11 @@ class DatabaseService {
   Future<void> insertSensorDataBatch(List<SensorDataPoint> dataPoints) async {
     final db = await database;
     final batch = db.batch();
-    
+
     for (var point in dataPoints) {
       batch.insert('sensor_data', point.toMap());
     }
-    
+
     await batch.commit(noResult: true);
   }
 
@@ -174,7 +181,7 @@ class DatabaseService {
     // Calculate max G forces
     double? maxPositiveG;
     double? maxNegativeG;
-    
+
     for (var point in dataPoints) {
       if (point.gForce != null) {
         if (maxPositiveG == null || point.gForce! > maxPositiveG) {
@@ -185,6 +192,24 @@ class DatabaseService {
         }
       }
     }
+
+    // Calculate max and average speed (filter out noise < 0.5 m/s)
+    double? maxSpeed;
+    double totalSpeed = 0;
+    int speedCount = 0;
+
+    for (var point in dataPoints) {
+      if (point.speed != null && point.speed! > 0.5) {
+        // Filter GPS noise
+        if (maxSpeed == null || point.speed! > maxSpeed) {
+          maxSpeed = point.speed;
+        }
+        totalSpeed += point.speed!;
+        speedCount++;
+      }
+    }
+
+    double? avgSpeed = speedCount > 0 ? totalSpeed / speedCount : null;
 
     // Calculate duration
     int? duration;
@@ -198,6 +223,8 @@ class DatabaseService {
       totalDistance: totalDistance,
       maxPositiveG: maxPositiveG,
       maxNegativeG: maxNegativeG,
+      maxSpeed: maxSpeed,
+      avgSpeed: avgSpeed,
     );
   }
 

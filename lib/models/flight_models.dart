@@ -9,7 +9,10 @@ class Flight {
   final double? totalDistance; // meters
   final double? maxPositiveG;
   final double? maxNegativeG;
+  final double? maxSpeed; // m/s
+  final double? avgSpeed; // m/s
   final String? notes;
+  final String name; // Flight name
 
   Flight({
     this.id,
@@ -20,8 +23,20 @@ class Flight {
     this.totalDistance,
     this.maxPositiveG,
     this.maxNegativeG,
+    this.maxSpeed,
+    this.avgSpeed,
     this.notes,
-  });
+    String? name,
+  }) : name = name ?? _generateDefaultName(startTime);
+
+  static String _generateDefaultName(DateTime startTime) {
+    final day = startTime.day.toString().padLeft(2, '0');
+    final month = startTime.month.toString().padLeft(2, '0');
+    final year = startTime.year;
+    final hour = startTime.hour.toString().padLeft(2, '0');
+    final minute = startTime.minute.toString().padLeft(2, '0');
+    return 'Flight of $day/$month/$year $hour:$minute';
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -33,7 +48,10 @@ class Flight {
       'total_distance': totalDistance,
       'max_positive_g': maxPositiveG,
       'max_negative_g': maxNegativeG,
+      'max_speed': maxSpeed,
+      'avg_speed': avgSpeed,
       'notes': notes,
+      'name': name,
     };
   }
 
@@ -49,7 +67,10 @@ class Flight {
       totalDistance: map['total_distance'] as double?,
       maxPositiveG: map['max_positive_g'] as double?,
       maxNegativeG: map['max_negative_g'] as double?,
+      maxSpeed: map['max_speed'] as double?,
+      avgSpeed: map['avg_speed'] as double?,
       notes: map['notes'] as String?,
+      name: map['name'] as String?,
     );
   }
 
@@ -62,7 +83,10 @@ class Flight {
     double? totalDistance,
     double? maxPositiveG,
     double? maxNegativeG,
+    double? maxSpeed,
+    double? avgSpeed,
     String? notes,
+    String? name,
   }) {
     return Flight(
       id: id ?? this.id,
@@ -73,7 +97,10 @@ class Flight {
       totalDistance: totalDistance ?? this.totalDistance,
       maxPositiveG: maxPositiveG ?? this.maxPositiveG,
       maxNegativeG: maxNegativeG ?? this.maxNegativeG,
+      maxSpeed: maxSpeed ?? this.maxSpeed,
+      avgSpeed: avgSpeed ?? this.avgSpeed,
       notes: notes ?? this.notes,
+      name: name ?? this.name,
     );
   }
 }
@@ -91,6 +118,7 @@ class SensorDataPoint {
   final double? accelZ;
   final double? gForce;
   final double? heading;
+  final double? presure;
 
   SensorDataPoint({
     this.id,
@@ -105,6 +133,7 @@ class SensorDataPoint {
     this.accelZ,
     this.gForce,
     this.heading,
+    this.presure,
   });
 
   Map<String, dynamic> toMap() {
@@ -121,6 +150,7 @@ class SensorDataPoint {
       'accel_z': accelZ,
       'g_force': gForce,
       'heading': heading,
+      'presure': presure,
     };
   }
 
@@ -138,6 +168,7 @@ class SensorDataPoint {
       accelZ: map['accel_z'] as double?,
       gForce: map['g_force'] as double?,
       heading: map['heading'] as double?,
+      presure: map['presure'] as double?,
     );
   }
 
@@ -149,7 +180,8 @@ class SensorDataPoint {
         '${accelY ?? ''},'
         '${accelZ ?? ''},'
         '${gForce ?? ''},'
-        '${heading ?? ''}';
+        '${heading ?? ''},'
+        '${presure ?? ''},';
   }
 
   static String csvHeader() {

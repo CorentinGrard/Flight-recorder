@@ -12,7 +12,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-  final _recordingService = RecordingService.instance;
 
   static const List<Widget> _pages = [
     RecordPage(),

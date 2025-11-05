@@ -16,13 +16,20 @@ class RecordingService {
   StreamSubscription<Position>? _positionSubscription;
   StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
   StreamSubscription<MagnetometerEvent>? _magnetometerSubscription;
+  StreamSubscription<BarometerEvent>? _barometerSubscription;
 
   Position? _lastPosition;
   AccelerometerEvent? _lastAccelerometer;
   double? _lastHeading;
+  double? _lastPresure;
+
+  // GPS accuracy tracking
+  bool _hasGoodGpsFix = false;
+  int _gpsReadings = 0;
 
   final List<SensorDataPoint> _dataBuffer = [];
   Timer? _bufferTimer;
+  Timer? _sensorCollectionTimer;
   static const int _bufferSize = 10; // Save every 10 points
   static const Duration _bufferInterval = Duration(seconds: 5);
 
@@ -34,6 +41,7 @@ class RecordingService {
 
   bool get isRecording => _isRecording;
   Flight? get currentFlight => _currentFlight;
+  double? get currentSpeed => _lastPosition?.speed;
 
   Future<bool> startRecording() async {
     if (_isRecording) return false;
@@ -52,6 +60,8 @@ class RecordingService {
     final flightId = await DatabaseService.instance.createFlight(flight);
     _currentFlightId = flightId;
     _currentFlight = flight.copyWith(id: flightId);
+    _hasGoodGpsFix = false;
+    _gpsReadings = 0;
 
     _isRecording = true;
     _startListening();
@@ -89,46 +99,112 @@ class RecordingService {
   }
 
   void _startListening() {
-    // GPS tracking (1 Hz)
+    // GPS tracking (1 Hz) with longer timeout
     const locationSettings = LocationSettings(
       accuracy: LocationAccuracy.best,
       distanceFilter: 0,
-      timeLimit: Duration(seconds: 1),
+      timeLimit: Duration(seconds: 30), // Increased timeout for GPS fix
     );
 
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: locationSettings,
-    ).listen(_onPositionUpdate);
+    ).listen(
+      _onPositionUpdate,
+      onError: (error) {
+        print('GPS Error: $error');
+        // Continue running even if GPS has issues
+      },
+      cancelOnError: false,
+    );
 
-    // Accelerometer (50 Hz, will be sampled down)
+    // Accelerometer (~50 Hz)
     _accelerometerSubscription = accelerometerEventStream(
-      samplingPeriod: Duration(milliseconds: 50),
-    ).listen(_onAccelerometerUpdate);
+      samplingPeriod: const Duration(milliseconds: 20), // ~50 Hz
+    ).listen(
+      _onAccelerometerUpdate,
+      onError: (error) {
+        print('Accelerometer Error: $error');
+      },
+      cancelOnError: false,
+    );
 
-    // Magnetometer for heading (10 Hz)
+    // Magnetometer for presure (~10 Hz)
     _magnetometerSubscription = magnetometerEventStream(
-      samplingPeriod: Duration(seconds: 1),
-    ).listen(_onMagnetometerUpdate);
+      samplingPeriod: const Duration(milliseconds: 100), // ~10 Hz
+    ).listen(
+      _onMagnetometerUpdate,
+      onError: (error) {
+        print('Magnetometer Error: $error');
+      },
+      cancelOnError: false,
+    );
+
+    // Barometer for heading (~10 Hz)
+    _barometerSubscription = barometerEventStream(
+      samplingPeriod: const Duration(seconds: 1), // ~1 Hz
+    ).listen(
+      _onBarometerUpdate,
+      onError: (error) {
+        print('Barometer Error: $error');
+      },
+      cancelOnError: false,
+    );
 
     // Start buffer timer
     _bufferTimer = Timer.periodic(_bufferInterval, (_) => _saveBufferedData());
+
+    // Start sensor collection timer (collect every second even without GPS updates)
+    _sensorCollectionTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _collectDataPoint();
+    });
+
+    // Get initial position to kickstart GPS
+    _getInitialPosition();
+  }
+
+  Future<void> _getInitialPosition() async {
+    try {
+      final position = await Geolocator.getCurrentPosition();
+      _lastPosition = position;
+      _collectDataPoint();
+    } catch (e) {
+      print('Error getting initial position: $e');
+      // Not critical, stream will continue trying
+    }
   }
 
   void _stopListening() {
     _positionSubscription?.cancel();
     _accelerometerSubscription?.cancel();
     _magnetometerSubscription?.cancel();
+    _barometerSubscription?.cancel();
     _bufferTimer?.cancel();
+    _sensorCollectionTimer?.cancel();
 
     _positionSubscription = null;
     _accelerometerSubscription = null;
     _magnetometerSubscription = null;
+    _barometerSubscription = null;
     _bufferTimer = null;
+    _sensorCollectionTimer = null;
   }
 
   void _onPositionUpdate(Position position) {
+    _gpsReadings++;
+
+    // Check GPS accuracy - accuracy is in meters
+    // Good GPS fix: accuracy < 20m and at least 5 readings
+    if (position.accuracy < 20 && _gpsReadings >= 5) {
+      _hasGoodGpsFix = true;
+    }
+
     _lastPosition = position;
-    _collectDataPoint();
+
+    // Calculate heading from GPS bearing (more accurate than magnetometer)
+    if (position.speed > 1.0) {
+      // Only use bearing when moving > 1 m/s
+      _lastHeading = position.heading;
+    }
   }
 
   void _onAccelerometerUpdate(AccelerometerEvent event) {
@@ -137,12 +213,42 @@ class RecordingService {
 
   void _onMagnetometerUpdate(MagnetometerEvent event) {
     // Simple heading calculation (more accurate would use rotation matrix)
-    _lastHeading = atan2(event.y, event.x) * (180 / pi);
-    if (_lastHeading! < 0) _lastHeading = _lastHeading! + 360;
+    if (_lastPosition != null && _lastPosition!.speed <= 1.0) {
+      _lastHeading = atan2(event.y, event.x) * (180 / pi);
+      if (_lastHeading! < 0) _lastHeading = _lastHeading! + 360;
+    }
+  }
+
+  void _onBarometerUpdate(BarometerEvent event) {
+    // Simple heading calculation (more accurate would use rotation matrix)
+    _lastPresure = event.pressure;
   }
 
   void _collectDataPoint() {
-    if (!_isRecording || _currentFlightId == null || _lastPosition == null) {
+    if (!_isRecording || _currentFlightId == null) {
+      return;
+    }
+
+    // If we don't have GPS yet, just update UI with sensor data but don't save
+    if (_lastPosition == null) {
+      final gForce = _lastAccelerometer != null
+          ? _calculateGForce(
+              _lastAccelerometer!.x,
+              _lastAccelerometer!.y,
+              _lastAccelerometer!.z,
+            )
+          : null;
+
+      // Emit current data for UI (without GPS)
+      _currentDataController.add({
+        'altitude': null,
+        'speed': null,
+        'gForce': gForce,
+        'heading': _lastHeading,
+        'presure': _lastPresure,
+        'gpsAccuracy': null,
+        'hasGoodFix': false,
+      });
       return;
     }
 
@@ -154,21 +260,25 @@ class RecordingService {
           )
         : null;
 
-    final dataPoint = SensorDataPoint(
-      flightId: _currentFlightId!,
-      timestamp: DateTime.now(),
-      latitude: _lastPosition!.latitude,
-      longitude: _lastPosition!.longitude,
-      altitude: _lastPosition!.altitude,
-      speed: _lastPosition!.speed,
-      accelX: _lastAccelerometer?.x,
-      accelY: _lastAccelerometer?.y,
-      accelZ: _lastAccelerometer?.z,
-      gForce: gForce,
-      heading: _lastHeading,
-    );
+    // Only save data with reasonable GPS accuracy (< 50m)
+    if (_lastPosition!.accuracy < 50) {
+      final dataPoint = SensorDataPoint(
+        flightId: _currentFlightId!,
+        timestamp: DateTime.now(),
+        latitude: _lastPosition!.latitude,
+        longitude: _lastPosition!.longitude,
+        altitude: _lastPosition!.altitude,
+        speed: _lastPosition!.speed,
+        accelX: _lastAccelerometer?.x,
+        accelY: _lastAccelerometer?.y,
+        accelZ: _lastAccelerometer?.z,
+        gForce: gForce,
+        heading: _lastHeading,
+        presure: _lastPresure,
+      );
 
-    _dataBuffer.add(dataPoint);
+      _dataBuffer.add(dataPoint);
+    }
 
     // Emit current data for UI
     _currentDataController.add({
@@ -176,7 +286,9 @@ class RecordingService {
       'speed': _lastPosition!.speed,
       'gForce': gForce,
       'heading': _lastHeading,
-      'dataPointCount': _dataBuffer.length,
+      'presure': _lastPresure,
+      'gpsAccuracy': _lastPosition!.accuracy,
+      'hasGoodFix': _hasGoodGpsFix,
     });
 
     // Save buffer if full

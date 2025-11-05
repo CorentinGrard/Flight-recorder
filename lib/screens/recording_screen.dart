@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../services/recording_service.dart';
+import '../services/database_service.dart';
 import 'flight_detail_screen.dart';
 
 class RecordingScreen extends StatefulWidget {
@@ -15,13 +15,15 @@ class _RecordingScreenState extends State<RecordingScreen> {
   final _recordingService = RecordingService.instance;
   StreamSubscription? _dataSubscription;
   Timer? _durationTimer;
-  
+
   Duration _elapsedTime = Duration.zero;
   double? _currentAltitude;
   double? _currentSpeed;
   double? _currentGForce;
   double? _currentHeading;
-  int _dataPointCount = 0;
+  double? _currentPresure;
+  double? _gpsAccuracy;
+  bool _hasGoodGpsFix = false;
 
   @override
   void initState() {
@@ -45,15 +47,18 @@ class _RecordingScreenState extends State<RecordingScreen> {
           _currentSpeed = data['speed'];
           _currentGForce = data['gForce'];
           _currentHeading = data['heading'];
-          _dataPointCount = data['dataPointCount'] ?? 0;
+          _currentPresure = data['presure'];
+          _gpsAccuracy = data['gpsAccuracy'];
+          _hasGoodGpsFix = data['hasGoodFix'] ?? false;
         });
       }
     });
   }
 
   void _startDurationTimer() {
-    final startTime = _recordingService.currentFlight?.startTime ?? DateTime.now();
-    
+    final startTime =
+        _recordingService.currentFlight?.startTime ?? DateTime.now();
+
     _durationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         setState(() {
@@ -73,15 +78,19 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) async {
+        if (didPop) return;
+
         // Prevent accidental back navigation
         final shouldStop = await _showStopConfirmation();
-        if (shouldStop == true) {
+        if (shouldStop == true && context.mounted) {
           await _stopRecording();
-          return true;
+          if (context.mounted) {
+            Navigator.of(context).pop();
+          }
         }
-        return false;
       },
       child: Scaffold(
         appBar: AppBar(
@@ -98,7 +107,9 @@ class _RecordingScreenState extends State<RecordingScreen> {
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
-                color: Colors.red.shade50,
+                color: _hasGoodGpsFix
+                    ? Colors.green.shade50
+                    : Colors.orange.shade50,
                 child: Column(
                   children: [
                     Text(
@@ -106,16 +117,34 @@ class _RecordingScreenState extends State<RecordingScreen> {
                       style: const TextStyle(
                         fontSize: 48,
                         fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                         fontFamily: 'monospace',
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      'Recording in progress',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey.shade700,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _hasGoodGpsFix
+                              ? Icons.gps_fixed
+                              : Icons.gps_not_fixed,
+                          size: 16,
+                          color: _hasGoodGpsFix ? Colors.green : Colors.orange,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _hasGoodGpsFix
+                              ? 'Recording - GPS locked'
+                              : _gpsAccuracy != null
+                                  ? 'Waiting for GPS (±${_gpsAccuracy!.toStringAsFixed(0)}m)'
+                                  : 'Waiting for GPS...',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -123,53 +152,57 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
               // Current data display
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      _buildDataCard(
-                        'Altitude',
-                        _currentAltitude != null
-                            ? '${_currentAltitude!.toStringAsFixed(1)} m'
-                            : '---',
-                        Icons.terrain,
-                        Colors.blue,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildDataCard(
-                        'Speed',
-                        _currentSpeed != null
-                            ? '${(_currentSpeed! * 3.6).toStringAsFixed(1)} km/h'
-                            : '---',
-                        Icons.speed,
-                        Colors.green,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildDataCard(
-                        'G-Force',
-                        _currentGForce != null
-                            ? '${_currentGForce!.toStringAsFixed(2)} G'
-                            : '---',
-                        Icons.trending_up,
-                        _getGForceColor(_currentGForce),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildDataCard(
-                        'Heading',
-                        _currentHeading != null
-                            ? '${_currentHeading!.toStringAsFixed(0)}°'
-                            : '---',
-                        Icons.explore,
-                        Colors.orange,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildDataCard(
-                        'Data Points',
-                        '$_dataPointCount',
-                        Icons.data_usage,
-                        Colors.purple,
-                      ),
-                    ],
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        _buildDataCard(
+                          'Altitude',
+                          _currentAltitude != null
+                              ? '${_currentAltitude!.toStringAsFixed(1)} m'
+                              : '---',
+                          Icons.terrain,
+                          Colors.blue,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildDataCard(
+                          'Speed',
+                          _currentSpeed != null
+                              ? '${(_currentSpeed! * 3.6).toStringAsFixed(1)} km/h'
+                              : '---',
+                          Icons.speed,
+                          Colors.green,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildDataCard(
+                          'G-Force',
+                          _currentGForce != null
+                              ? '${_currentGForce!.toStringAsFixed(2)} G'
+                              : '---',
+                          Icons.trending_up,
+                          _getGForceColor(_currentGForce),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildDataCard(
+                          'Heading',
+                          _currentHeading != null
+                              ? '${_currentHeading!.toStringAsFixed(0)}°'
+                              : '---',
+                          Icons.explore,
+                          Colors.orange,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildDataCard(
+                          'Presure',
+                          _currentPresure != null
+                              ? '${_currentPresure!.toStringAsFixed(0)} hPa'
+                              : '---',
+                          Icons.compress,
+                          Colors.purple,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -201,7 +234,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
     );
   }
 
-  Widget _buildDataCard(String label, String value, IconData icon, Color color) {
+  Widget _buildDataCard(
+      String label, String value, IconData icon, Color color) {
     return Card(
       elevation: 2,
       child: Padding(
@@ -258,7 +292,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Stop Recording?'),
-        content: const Text('Are you sure you want to stop recording this flight?'),
+        content:
+            const Text('Are you sure you want to stop recording this flight?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -274,9 +309,40 @@ class _RecordingScreenState extends State<RecordingScreen> {
   }
 
   Future<void> _stopRecording() async {
+    // Check if flight duration is less than 1 minute
+    final flightDuration = DateTime.now().difference(
+      _recordingService.currentFlight?.startTime ?? DateTime.now(),
+    );
+
+    if (flightDuration.inSeconds < 60) {
+      final shouldDelete = await _showShortFlightDialog();
+      if (shouldDelete == null) return; // User cancelled
+
+      if (shouldDelete) {
+        // Delete the flight immediately
+        if (_recordingService.currentFlight?.id != null) {
+          await DatabaseService.instance.deleteFlight(
+            _recordingService.currentFlight!.id!,
+          );
+        }
+        await _recordingService.stopRecording();
+        if (mounted) {
+          Navigator.of(context).pop();
+        }
+        return;
+      }
+    }
+
+    // Check if speed is above 50 km/h
+    final currentSpeed = _recordingService.currentSpeed;
+    if (currentSpeed != null && currentSpeed * 3.6 > 50) {
+      final shouldStop = await _showHighSpeedWarning();
+      if (shouldStop != true) return;
+    }
+
     try {
       final flight = await _recordingService.stopRecording();
-      
+
       if (flight != null && mounted) {
         // Navigate to flight detail screen
         Navigator.of(context).pushReplacement(
@@ -297,5 +363,56 @@ class _RecordingScreenState extends State<RecordingScreen> {
         );
       }
     }
+  }
+
+  Future<bool?> _showShortFlightDialog() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Short Flight'),
+        content: const Text(
+          'This flight lasted less than 1 minute. Do you want to delete it?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(null),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep Flight'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool?> _showHighSpeedWarning() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Still in Flight?'),
+        content: Text(
+          'Your ground speed is ${(_currentSpeed! * 3.6).toStringAsFixed(0)} km/h. '
+          'Are you sure you want to stop recording?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Continue Recording'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Stop Recording'),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -1,4 +1,4 @@
-package com.example.planeur_tracker
+package app.corentin.planeur_tracker
 
 import io.flutter.embedding.android.FlutterActivity
 

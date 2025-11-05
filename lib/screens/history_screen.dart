@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/flight_models.dart';
 import '../services/database_service.dart';
+import '../services/export_service.dart';
 import 'flight_detail_screen.dart';
+import 'flight_visualization_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -107,12 +109,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: InkWell(
         onTap: () => _openFlightDetail(flight.id!),
+        onLongPress: () => _showFlightOptions(flight),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text(
+                flight.name,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -120,15 +131,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     children: [
                       Icon(
                         Icons.calendar_today,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.primary,
+                        size: 14,
+                        color: Colors.grey.shade600,
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       Text(
                         dateFormat.format(flight.startTime),
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade600,
                         ),
                       ),
                     ],
@@ -244,5 +255,175 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
     // Refresh list when returning
     _loadFlights();
+  }
+
+  Future<void> _showFlightOptions(Flight flight) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.visibility),
+              title: const Text('View Details'),
+              onTap: () => Navigator.of(context).pop('view'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.map),
+              title: const Text('View Flight Path'),
+              onTap: () => Navigator.of(context).pop('visualize'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit),
+              title: const Text('Rename Flight'),
+              onTap: () => Navigator.of(context).pop('rename'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.file_download),
+              title: const Text('Export CSV'),
+              onTap: () => Navigator.of(context).pop('export_csv'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.map),
+              title: const Text('Export GPX'),
+              onTap: () => Navigator.of(context).pop('export_gpx'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Delete Flight', style: TextStyle(color: Colors.red)),
+              onTap: () => Navigator.of(context).pop('delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (action == null || !mounted) return;
+
+    switch (action) {
+      case 'view':
+        _openFlightDetail(flight.id!);
+        break;
+      case 'visualize':
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => FlightVisualizationScreen(flightId: flight.id!),
+          ),
+        );
+        break;
+      case 'rename':
+        await _renameFlight(flight);
+        break;
+      case 'export_csv':
+        await _exportFlight(flight.id!, 'csv');
+        break;
+      case 'export_gpx':
+        await _exportFlight(flight.id!, 'gpx');
+        break;
+      case 'delete':
+        await _deleteFlight(flight.id!);
+        break;
+    }
+  }
+
+  Future<void> _renameFlight(Flight flight) async {
+    final controller = TextEditingController(text: flight.name);
+    
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename Flight'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Flight Name',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (newName != null && newName.isNotEmpty && newName != flight.name) {
+      final updatedFlight = flight.copyWith(name: newName);
+      await DatabaseService.instance.updateFlight(updatedFlight);
+      _loadFlights();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Flight renamed')),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportFlight(int flightId, String format) async {
+    try {
+      if (format == 'csv') {
+        await ExportService.instance.shareFlightCsv(flightId);
+      } else if (format == 'gpx') {
+        await ExportService.instance.shareFlightGpx(flightId);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Export successful')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteFlight(int flightId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Flight'),
+        content: const Text(
+          'Are you sure you want to delete this flight? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await DatabaseService.instance.deleteFlight(flightId);
+      _loadFlights();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Flight deleted')),
+        );
+      }
+    }
   }
 }

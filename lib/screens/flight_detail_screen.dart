@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../models/flight_models.dart';
 import '../services/database_service.dart';
 import '../services/export_service.dart';
+import 'flight_visualization_screen.dart';
 
 class FlightDetailScreen extends StatefulWidget {
   final int flightId;
@@ -56,6 +57,10 @@ class _FlightDetailScreenState extends State<FlightDetailScreen> {
         title: const Text('Flight Details'),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: _renameFlight,
+          ),
           PopupMenuButton<String>(
             onSelected: _handleMenuSelection,
             itemBuilder: (context) => [
@@ -121,42 +126,55 @@ class _FlightDetailScreenState extends State<FlightDetailScreen> {
                     Row(
                       children: [
                         Icon(
-                          Icons.calendar_today,
+                          Icons.flight,
                           color: Theme.of(context).colorScheme.primary,
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                dateFormat.format(_flight!.startTime),
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Started at ${timeFormat.format(_flight!.startTime)}',
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              if (_flight!.endTime != null)
-                                Text(
-                                  'Ended at ${timeFormat.format(_flight!.endTime!)}',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                            ],
+                          child: Text(
+                            _flight!.name,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.calendar_today,
+                          size: 16,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          dateFormat.format(_flight!.startTime),
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Started at ${timeFormat.format(_flight!.startTime)}',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    if (_flight!.endTime != null)
+                      Text(
+                        'Ended at ${timeFormat.format(_flight!.endTime!)}',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 14,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -211,6 +229,28 @@ class _FlightDetailScreenState extends State<FlightDetailScreen> {
 
             // Export Buttons
             if (!_isExporting) ...[
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => FlightVisualizationScreen(
+                          flightId: widget.flightId,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.map),
+                  label: const Text('View Flight Path'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -272,6 +312,22 @@ class _FlightDetailScreenState extends State<FlightDetailScreen> {
               : 'N/A',
           Icons.route,
           Colors.orange,
+        ),
+        _buildStatCard(
+          'Max Speed',
+          _flight!.maxSpeed != null
+              ? '${(_flight!.maxSpeed! * 3.6).toStringAsFixed(1)} km/h'
+              : 'N/A',
+          Icons.speed,
+          Colors.cyan,
+        ),
+        _buildStatCard(
+          'Avg Speed',
+          _flight!.avgSpeed != null
+              ? '${(_flight!.avgSpeed! * 3.6).toStringAsFixed(1)} km/h'
+              : 'N/A',
+          Icons.av_timer,
+          Colors.teal,
         ),
         _buildStatCard(
           'Max +G',
@@ -431,6 +487,47 @@ class _FlightDetailScreenState extends State<FlightDetailScreen> {
             content: Text('Error deleting flight: $e'),
             backgroundColor: Colors.red,
           ),
+        );
+      }
+    }
+  }
+
+  Future<void> _renameFlight() async {
+    final controller = TextEditingController(text: _flight!.name);
+    
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename Flight'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Flight Name',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (newName != null && newName.isNotEmpty && newName != _flight!.name) {
+      final updatedFlight = _flight!.copyWith(name: newName);
+      await DatabaseService.instance.updateFlight(updatedFlight);
+      _loadFlight();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Flight renamed')),
         );
       }
     }
