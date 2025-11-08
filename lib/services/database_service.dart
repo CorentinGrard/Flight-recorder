@@ -10,7 +10,7 @@ class DatabaseService {
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('glider_tracker.db');
+    _database = await _initDB('flight_recorder.db');
     return _database!;
   }
 

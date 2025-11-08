@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Glider Tracker</string>
+	<string>Flight recorder</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -35,7 +35,7 @@
 	
 	<!-- Location Permissions -->
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>We need your location to track your glider flights</string>
+	<string>We need your location to track your flights</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>We need background location to record flights even when the app is in background</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

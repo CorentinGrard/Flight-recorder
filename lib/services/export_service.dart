@@ -45,8 +45,8 @@ class ExportService {
       final csvPath = await exportFlightToCsv(flightId);
       await Share.shareXFiles(
         [XFile(csvPath)],
-        subject: 'Glider Flight Data',
-        text: 'Flight recording data from Glider Tracker',
+        subject: 'Flight Data',
+        text: 'Flight recording data from Flight Recorder',
       );
     } catch (e) {
       throw Exception('Failed to export flight: $e');
@@ -82,14 +82,14 @@ class ExportService {
     final dateFormat = DateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
 
     buffer.writeln('<?xml version="1.0" encoding="UTF-8"?>');
-    buffer.writeln('<gpx version="1.1" creator="Glider Tracker"');
+    buffer.writeln('<gpx version="1.1" creator="Flight Recorder"');
     buffer.writeln('  xmlns="http://www.topografix.com/GPX/1/1"');
     buffer.writeln('  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"');
-    buffer.writeln('  xmlns:accel="http://glidertracker.com/accel/1.0"');
+    buffer.writeln('  xmlns:accel="http://flightrecorder.com/accel/1.0"');
     buffer.writeln('  xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">');
     
     buffer.writeln('  <metadata>');
-    buffer.writeln('    <name>Glider Flight ${dateFormat.format(flight.startTime)}</name>');
+    buffer.writeln('    <name>Flight Recorder ${dateFormat.format(flight.startTime)}</name>');
     buffer.writeln('    <time>${dateFormat.format(flight.startTime)}</time>');
     buffer.writeln('  </metadata>');
     
@@ -137,11 +137,11 @@ class ExportService {
       final gpxPath = await exportFlightToGpx(flightId);
       await Share.shareXFiles(
         [XFile(gpxPath)],
-        subject: 'Glider Flight GPX',
-        text: 'Flight track from Glider Tracker',
+        subject: 'Flight GPX',
+        text: 'Flight track from Flight Recorder',
       );
     } catch (e) {
       throw Exception('Failed to export flight: $e');
     }
   }
-}
+} 

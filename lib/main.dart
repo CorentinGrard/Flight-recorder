@@ -9,16 +9,16 @@ void main() async {
   // Initialize database early to ensure it's ready
   await DatabaseService.instance.database;
   
-  runApp(const GliderTrackerApp());
+  runApp(const FlightRecorderApp());
 }
 
-class GliderTrackerApp extends StatelessWidget {
-  const GliderTrackerApp({super.key});
+class FlightRecorderApp extends StatelessWidget {
+  const FlightRecorderApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Glider Tracker',
+      title: 'Flight Recorder',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.blue,

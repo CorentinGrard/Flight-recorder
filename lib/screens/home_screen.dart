@@ -53,7 +53,7 @@ class RecordPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Glider Tracker'),
+        title: const Text('Flight Recorder'),
         centerTitle: true,
       ),
       body: Center(
