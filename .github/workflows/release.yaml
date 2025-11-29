@@ -1,0 +1,77 @@
+name: Build and Release APK
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on tags like v1.0.0, v1.2.3, etc.
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+      
+      - name: Get dependencies
+        run: flutter pub get
+      
+      - name: Run tests (optional)
+        run: flutter test
+        continue-on-error: true  # Don't fail if no tests exist
+      
+      - name: Build APK
+        run: flutter build apk --release
+      
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      
+      - name: Rename APK
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk \
+             build/app/outputs/flutter-apk/glider-tracker-${{ steps.get_version.outputs.VERSION }}.apk
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          body: |
+            ## Glider Tracker ${{ steps.get_version.outputs.VERSION }}
+            
+            ### Installation
+            Download the APK and install on your Android device.
+            
+            ### What's New
+            See commit history for changes.
+            
+            ### Requirements
+            - Android 6.0 (API 23) or higher
+            - GPS and accelerometer sensors
+          files: |
+            build/app/outputs/flutter-apk/glider-tracker-${{ steps.get_version.outputs.VERSION }}.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: glider-tracker-apk
+          path: build/app/outputs/flutter-apk/glider-tracker-${{ steps.get_version.outputs.VERSION }}.apk
+          retention-days: 30
