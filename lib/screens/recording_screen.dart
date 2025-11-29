@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import '../services/recording_service.dart';
 import '../services/database_service.dart';
 import 'flight_detail_screen.dart';
@@ -30,6 +31,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
     super.initState();
     _startListening();
     _startDurationTimer();
+    // Enable wake lock at screen level too
+    WakelockPlus.enable();
   }
 
   @override
@@ -56,8 +59,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   }
 
   void _startDurationTimer() {
-    final startTime =
-        _recordingService.currentFlight?.startTime ?? DateTime.now();
+    final startTime = _recordingService.currentFlight?.startTime ?? DateTime.now();
 
     _durationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
@@ -107,9 +109,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
-                color: _hasGoodGpsFix
-                    ? Colors.green.shade50
-                    : Colors.orange.shade50,
+                color: _hasGoodGpsFix ? Colors.green.shade50 : Colors.orange.shade50,
                 child: Column(
                   children: [
                     Text(
@@ -126,9 +126,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          _hasGoodGpsFix
-                              ? Icons.gps_fixed
-                              : Icons.gps_not_fixed,
+                          _hasGoodGpsFix ? Icons.gps_fixed : Icons.gps_not_fixed,
                           size: 16,
                           color: _hasGoodGpsFix ? Colors.green : Colors.orange,
                         ),
@@ -142,6 +140,26 @@ class _RecordingScreenState extends State<RecordingScreen> {
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.screen_lock_rotation,
+                          size: 14,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Keep screen on during recording',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                            fontStyle: FontStyle.italic,
                           ),
                         ),
                       ],
@@ -234,8 +252,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
     );
   }
 
-  Widget _buildDataCard(
-      String label, String value, IconData icon, Color color) {
+  Widget _buildDataCard(String label, String value, IconData icon, Color color) {
     return Card(
       elevation: 2,
       child: Padding(
@@ -292,8 +309,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Stop Recording?'),
-        content:
-            const Text('Are you sure you want to stop recording this flight?'),
+        content: const Text('Are you sure you want to stop recording this flight?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),

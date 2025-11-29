@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:io' show Platform;
 import 'package:geolocator/geolocator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -51,6 +52,13 @@ class RecordingService {
     bool hasPermission = await _checkPermissions();
     if (!hasPermission) {
       throw Exception('Location permissions not granted');
+    }
+
+    // Enable wake lock to keep screen on and GPS active
+    try {
+      await WakelockPlus.enable();
+    } catch (e) {
+      print('Failed to enable wakelock: $e');
     }
 
     // Create new flight
@@ -107,12 +115,36 @@ class RecordingService {
   }
 
   void _startListening() {
-    // GPS tracking (1 Hz) with longer timeout
-    const locationSettings = LocationSettings(
+    // GPS tracking - Platform-specific settings for continuous recording
+    final LocationSettings locationSettings;
+    
+    if (Platform.isAndroid) {
+      locationSettings = AndroidSettings(
+        accuracy: LocationAccuracy.best,
+        distanceFilter: 0,
+        forceLocationManager: true, // Use location manager instead of FusedLocationProvider
+        intervalDuration: const Duration(seconds: 1),
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationText: "Flight Recorder is recording your flight",
+          notificationTitle: "Recording Flight",
+          enableWakeLock: true,
+        ),
+      );
+    } else if (Platform.isIOS) {
+      locationSettings = AppleSettings(
+        accuracy: LocationAccuracy.best,
+        distanceFilter: 0,
+        activityType: ActivityType.otherNavigation,
+        pauseLocationUpdatesAutomatically: false,
+        showBackgroundLocationIndicator: true,
+      );
+    } else {
+      // Fallback for other platforms (shouldn't happen in production)
+      locationSettings = const LocationSettings(
       accuracy: LocationAccuracy.best,
       distanceFilter: 0,
-      timeLimit: Duration(seconds: 30), // Increased timeout for GPS fix
     );
+    }
 
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: locationSettings,
