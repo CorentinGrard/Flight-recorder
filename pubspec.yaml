@@ -1,7 +1,7 @@
 name: flight_recorder
 description: A flight recording app with GPS and accelerometer data.
 publish_to: "none"
-version: 1.0.1
+version: 1.0.2
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -19,7 +19,6 @@ dependencies:
   # Database
   sqflite: ^2.4.2
   path_provider: ^2.1.5
-  path: ^1.9.1
 
   # Utils
   intl: ^0.20.2
