@@ -1,7 +1,7 @@
 name: flight_recorder
 description: A flight recording app with GPS and accelerometer data.
 publish_to: "none"
-version: 1.0.0
+version: 1.0.1
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -29,7 +29,6 @@ dependencies:
   # Map & Visualization
   flutter_map: ^8.2.2
   latlong2: ^0.9.1
-  vector_math: ^2.2.0
 
   # UI
   cupertino_icons: ^1.0.8
