@@ -26,7 +26,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.0'
+          flutter-version: '3.24.0'
           channel: 'stable'
           cache: true
 
@@ -35,7 +35,7 @@ jobs:
 
       - name: Run tests (optional)
         run: flutter test
-        continue-on-error: true  # Don't fail if no tests exist
+        continue-on-error: true
 
       - name: Build APK
         run: flutter build apk --release
