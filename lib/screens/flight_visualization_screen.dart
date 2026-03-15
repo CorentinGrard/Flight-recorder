@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import 'dart:math' as math;
 import '../models/flight_models.dart';
 import '../services/database_service.dart';
-import '../widgets/flight_3d_view.dart';
+import '../widgets/flight_3d_map_view.dart';
 
 enum VisualizationMode { speed, gForce }
-enum ViewMode { map2D, profile, map3D }
+enum ViewMode { map, profile }
 
 class FlightVisualizationScreen extends StatefulWidget {
   final int flightId;
@@ -19,13 +17,13 @@ class FlightVisualizationScreen extends StatefulWidget {
       _FlightVisualizationScreenState();
 }
 
-class _FlightVisualizationScreenState extends State<FlightVisualizationScreen> {
+class _FlightVisualizationScreenState
+    extends State<FlightVisualizationScreen> {
   Flight? _flight;
   List<SensorDataPoint> _dataPoints = [];
   bool _isLoading = true;
   VisualizationMode _vizMode = VisualizationMode.speed;
-  ViewMode _viewMode = ViewMode.map2D;
-  final MapController _mapController = MapController();
+  ViewMode _viewMode = ViewMode.map;
 
   @override
   void initState() {
@@ -35,23 +33,16 @@ class _FlightVisualizationScreenState extends State<FlightVisualizationScreen> {
 
   Future<void> _loadFlightData() async {
     setState(() => _isLoading = true);
-
     try {
       final flight = await DatabaseService.instance.getFlight(widget.flightId);
       final dataPoints =
           await DatabaseService.instance.getSensorDataForFlight(widget.flightId);
-
       if (mounted) {
         setState(() {
           _flight = flight;
           _dataPoints = dataPoints;
           _isLoading = false;
         });
-
-        // Center map on flight path
-        if (_dataPoints.isNotEmpty) {
-          _centerMapOnFlight();
-        }
       }
     } catch (e) {
       if (mounted) {
@@ -63,43 +54,6 @@ class _FlightVisualizationScreenState extends State<FlightVisualizationScreen> {
     }
   }
 
-  void _centerMapOnFlight() {
-    if (_dataPoints.isEmpty) return;
-
-    double minLat = _dataPoints.first.latitude;
-    double maxLat = _dataPoints.first.latitude;
-    double minLon = _dataPoints.first.longitude;
-    double maxLon = _dataPoints.first.longitude;
-
-    for (var point in _dataPoints) {
-      if (point.latitude < minLat) minLat = point.latitude;
-      if (point.latitude > maxLat) maxLat = point.latitude;
-      if (point.longitude < minLon) minLon = point.longitude;
-      if (point.longitude > maxLon) maxLon = point.longitude;
-    }
-
-    final centerLat = (minLat + maxLat) / 2;
-    final centerLon = (minLon + maxLon) / 2;
-
-    // Calculate appropriate zoom level
-    final latDiff = maxLat - minLat;
-    final lonDiff = maxLon - minLon;
-    final maxDiff = math.max(latDiff, lonDiff);
-
-    double zoom = 13.0;
-    if (maxDiff > 0.1) {
-      zoom = 11.0;
-    } else if (maxDiff > 0.05) {
-      zoom = 12.0;
-    } else if (maxDiff < 0.01) {
-      zoom = 15.0;
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _mapController.move(LatLng(centerLat, centerLon), zoom);
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -109,14 +63,9 @@ class _FlightVisualizationScreenState extends State<FlightVisualizationScreen> {
           SegmentedButton<ViewMode>(
             segments: const [
               ButtonSegment(
-                value: ViewMode.map2D,
+                value: ViewMode.map,
                 icon: Icon(Icons.map, size: 18),
-                label: Text('2D'),
-              ),
-              ButtonSegment(
-                value: ViewMode.map3D,
-                icon: Icon(Icons.threed_rotation, size: 18),
-                label: Text('3D'),
+                label: Text('Map'),
               ),
               ButtonSegment(
                 value: ViewMode.profile,
@@ -140,10 +89,12 @@ class _FlightVisualizationScreenState extends State<FlightVisualizationScreen> {
               ? const Center(child: Text('No flight data available'))
               : Column(
                   children: [
-                    // Mode toggle
+                    // Color-mode selector + legend
                     Container(
                       padding: const EdgeInsets.all(8),
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest,
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -164,7 +115,8 @@ class _FlightVisualizationScreenState extends State<FlightVisualizationScreen> {
                                 ),
                               ],
                               selected: {_vizMode},
-                              onSelectionChanged: (Set<VisualizationMode> selection) {
+                              onSelectionChanged:
+                                  (Set<VisualizationMode> selection) {
                                 setState(() {
                                   _vizMode = selection.first;
                                 });
@@ -176,103 +128,26 @@ class _FlightVisualizationScreenState extends State<FlightVisualizationScreen> {
                         ),
                       ),
                     ),
-                    // Visualization
+
+                    // Main content
                     Expanded(
-                      child: _viewMode == ViewMode.map2D
-                          ? _build2DMap()
-                          : _viewMode == ViewMode.map3D
-                              ? _build3DView()
-                              : _buildAltitudeProfile(),
+                      child: _viewMode == ViewMode.map
+                          ? Flight3DMapView(
+                              dataPoints: _dataPoints,
+                              getColor: _getColorForPoint,
+                            )
+                          : _buildAltitudeProfile(),
                     ),
                   ],
                 ),
     );
   }
 
-  Widget _build2DMap() {
-    if (_dataPoints.isEmpty) return const SizedBox();
-
-    // Create polyline segments with colors
-    final List<Polyline> polylines = [];
-    
-    for (int i = 0; i < _dataPoints.length - 1; i++) {
-      final point1 = _dataPoints[i];
-      final point2 = _dataPoints[i + 1];
-      
-      final color = _getColorForPoint(point1);
-      
-      polylines.add(
-        Polyline(
-          points: [
-            LatLng(point1.latitude, point1.longitude),
-            LatLng(point2.latitude, point2.longitude),
-          ],
-          color: color,
-          strokeWidth: 4.0,
-        ),
-      );
-    }
-
-    // Add start and end markers
-    final markers = [
-      Marker(
-        point: LatLng(_dataPoints.first.latitude, _dataPoints.first.longitude),
-        width: 40,
-        height: 40,
-        child: const Icon(
-          Icons.flight_takeoff,
-          color: Colors.green,
-          size: 30,
-        ),
-      ),
-      Marker(
-        point: LatLng(_dataPoints.last.latitude, _dataPoints.last.longitude),
-        width: 40,
-        height: 40,
-        child: const Icon(
-          Icons.flight_land,
-          color: Colors.red,
-          size: 30,
-        ),
-      ),
-    ];
-
-    return FlutterMap(
-      mapController: _mapController,
-      options: MapOptions(
-        initialCenter: LatLng(
-          _dataPoints.first.latitude,
-          _dataPoints.first.longitude,
-        ),
-        initialZoom: 13.0,
-        minZoom: 5.0,
-        maxZoom: 18.0,
-      ),
-      children: [
-        TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'app.corentin.planeur_tracker',
-          maxZoom: 19,
-        ),
-        PolylineLayer(polylines: polylines),
-        MarkerLayer(markers: markers),
-      ],
-    );
-  }
-
-  Widget _build3DView() {
-    if (_dataPoints.isEmpty) return const SizedBox();
-
-    return Flight3DView(
-      dataPoints: _dataPoints,
-      getColor: _getColorForPoint,
-    );
-  }
+  // ── Altitude profile ────────────────────────────────────────────────────────
 
   Widget _buildAltitudeProfile() {
     if (_dataPoints.isEmpty) return const SizedBox();
 
-    // Find min/max altitude
     double minAlt = _dataPoints
         .where((p) => p.altitude != null)
         .map((p) => p.altitude!)
@@ -283,7 +158,9 @@ class _FlightVisualizationScreenState extends State<FlightVisualizationScreen> {
         .reduce(math.max);
 
     final altRange = maxAlt - minAlt;
-    if (altRange == 0) return const Center(child: Text('No altitude variation'));
+    if (altRange == 0) {
+      return const Center(child: Text('No altitude variation'));
+    }
 
     return CustomPaint(
       painter: AltitudeProfilePainter(
@@ -297,6 +174,8 @@ class _FlightVisualizationScreenState extends State<FlightVisualizationScreen> {
     );
   }
 
+  // ── Color helpers ───────────────────────────────────────────────────────────
+
   Color _getColorForPoint(SensorDataPoint point) {
     if (_vizMode == VisualizationMode.speed) {
       return _getColorForSpeed(point.speed);
@@ -305,54 +184,47 @@ class _FlightVisualizationScreenState extends State<FlightVisualizationScreen> {
     }
   }
 
+  Color _lerpColor(Color a, Color b, double t) {
+    t = t.clamp(0.0, 1.0);
+    return Color.lerp(a, b, t)!;
+  }
+
   Color _getColorForSpeed(double? speed) {
     if (speed == null) return Colors.grey;
-
     final speedKmh = speed * 3.6;
-
-    // Color gradient: blue (slow) -> green -> yellow -> red (fast)
-    if (speedKmh < 20) {
-      return Colors.blue;
-    } else if (speedKmh < 40) {
-      return Colors.cyan;
-    } else if (speedKmh < 60) {
-      return Colors.green;
-    } else if (speedKmh < 80) {
-      return Colors.yellow;
-    } else if (speedKmh < 100) {
-      return Colors.orange;
-    } else {
-      return Colors.red;
-    }
+    const double slowKmh = 80.0;
+    const double fastKmh = 150.0;
+    if (speedKmh <= slowKmh) return Colors.green;
+    if (speedKmh >= fastKmh) return Colors.red;
+    final t = (speedKmh - slowKmh) / (fastKmh - slowKmh);
+    return t < 0.5
+        ? _lerpColor(Colors.green, Colors.yellow, t * 2)
+        : _lerpColor(Colors.yellow, Colors.red, (t - 0.5) * 2);
   }
 
   Color _getColorForGForce(double? gForce) {
     if (gForce == null) return Colors.grey;
-
-    // Color gradient based on G-force
-    if (gForce < 0.5) {
-      return Colors.purple; // Negative G / freefall
-    } else if (gForce < 1.0) {
-      return Colors.blue;
-    } else if (gForce < 1.5) {
-      return Colors.green;
-    } else if (gForce < 2.0) {
-      return Colors.yellow;
-    } else if (gForce < 3.0) {
-      return Colors.orange;
+    const double normalG = 1.0;
+    const double highG = 2.0;
+    const double extremeG = 4.0;
+    if (gForce <= normalG) return Colors.green;
+    if (gForce >= extremeG) return Colors.red;
+    if (gForce < highG) {
+      return _lerpColor(Colors.green, Colors.yellow,
+          (gForce - normalG) / (highG - normalG));
     } else {
-      return Colors.red; // High G
+      return _lerpColor(Colors.yellow, Colors.red,
+          (gForce - highG) / (extremeG - highG));
     }
   }
 
+  // ── Legend ──────────────────────────────────────────────────────────────────
+
   Widget _buildLegend() {
     final labels = _vizMode == VisualizationMode.speed
-        ? ['0', '40', '80', '120+ km/h']
-        : ['<0.5', '1.0', '2.0', '3.0+ G'];
-
-    final colors = _vizMode == VisualizationMode.speed
-        ? [Colors.blue, Colors.green, Colors.orange, Colors.red]
-        : [Colors.purple, Colors.green, Colors.orange, Colors.red];
+        ? ['80 km/h', '115 km/h', '150+ km/h']
+        : ['1G', '2G', '4G+'];
+    final colors = [Colors.green, Colors.yellow, Colors.red];
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -367,16 +239,17 @@ class _FlightVisualizationScreenState extends State<FlightVisualizationScreen> {
             ),
           ),
           const SizedBox(width: 4),
-          Text(
-            labels[i],
-            style: const TextStyle(fontSize: 10),
-          ),
+          Text(labels[i], style: const TextStyle(fontSize: 10)),
           if (i < colors.length - 1) const SizedBox(width: 8),
         ],
       ],
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Altitude profile painter (unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
 
 class AltitudeProfilePainter extends CustomPainter {
   final List<SensorDataPoint> dataPoints;
@@ -398,30 +271,19 @@ class AltitudeProfilePainter extends CustomPainter {
     if (dataPoints.isEmpty) return;
 
     final altRange = maxAlt - minAlt;
-    final padding = 40.0;
+    const padding = 40.0;
     final graphWidth = size.width - 2 * padding;
     final graphHeight = size.height - 2 * padding;
 
-    // Draw axes
     final axisPaint = Paint()
       ..color = Colors.grey.shade400
       ..strokeWidth = 2;
 
-    // Y-axis
-    canvas.drawLine(
-      Offset(padding, padding),
-      Offset(padding, size.height - padding),
-      axisPaint,
-    );
+    canvas.drawLine(Offset(padding, padding),
+        Offset(padding, size.height - padding), axisPaint);
+    canvas.drawLine(Offset(padding, size.height - padding),
+        Offset(size.width - padding, size.height - padding), axisPaint);
 
-    // X-axis
-    canvas.drawLine(
-      Offset(padding, size.height - padding),
-      Offset(size.width - padding, size.height - padding),
-      axisPaint,
-    );
-
-    // Draw grid lines
     final gridPaint = Paint()
       ..color = Colors.grey.shade300
       ..strokeWidth = 1;
@@ -429,21 +291,14 @@ class AltitudeProfilePainter extends CustomPainter {
     for (int i = 0; i <= 4; i++) {
       final y = padding + (graphHeight * i / 4);
       canvas.drawLine(
-        Offset(padding, y),
-        Offset(size.width - padding, y),
-        gridPaint,
-      );
+          Offset(padding, y), Offset(size.width - padding, y), gridPaint);
     }
 
-    // Draw altitude labels
-    final textPainter = TextPainter(
-      textDirection: TextDirection.ltr,
-    );
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
 
     for (int i = 0; i <= 4; i++) {
       final alt = maxAlt - (altRange * i / 4);
       final y = padding + (graphHeight * i / 4);
-
       textPainter.text = TextSpan(
         text: '${alt.toStringAsFixed(0)}m',
         style: const TextStyle(color: Colors.black, fontSize: 12),
@@ -452,16 +307,13 @@ class AltitudeProfilePainter extends CustomPainter {
       textPainter.paint(canvas, Offset(5, y - 6));
     }
 
-    // Draw profile with colored segments
     for (int i = 0; i < dataPoints.length - 1; i++) {
       final point1 = dataPoints[i];
       final point2 = dataPoints[i + 1];
-
       if (point1.altitude == null || point2.altitude == null) continue;
 
       final x1 = padding + (graphWidth * i / dataPoints.length);
       final x2 = padding + (graphWidth * (i + 1) / dataPoints.length);
-
       final y1 = size.height -
           padding -
           ((point1.altitude! - minAlt) / altRange * graphHeight);
@@ -469,12 +321,14 @@ class AltitudeProfilePainter extends CustomPainter {
           padding -
           ((point2.altitude! - minAlt) / altRange * graphHeight);
 
-      final segmentPaint = Paint()
-        ..color = getColor(point1)
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round;
-
-      canvas.drawLine(Offset(x1, y1), Offset(x2, y2), segmentPaint);
+      canvas.drawLine(
+        Offset(x1, y1),
+        Offset(x2, y2),
+        Paint()
+          ..color = getColor(point1)
+          ..strokeWidth = 3
+          ..strokeCap = StrokeCap.round,
+      );
     }
   }
 
