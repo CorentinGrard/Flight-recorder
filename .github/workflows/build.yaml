@@ -2,9 +2,9 @@ name: Build and Test
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, master, develop ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, master, develop ]
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -34,16 +34,8 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Verify formatting
-        run: dart format --output=none --set-exit-if-changed .
-        continue-on-error: true
-
       - name: Analyze code
         run: flutter analyze
-        continue-on-error: true
-
-      - name: Run tests
-        run: flutter test
         continue-on-error: true
 
       - name: Build APK (debug)

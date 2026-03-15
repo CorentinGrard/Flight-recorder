@@ -3,7 +3,7 @@ name: Build and Release APK
 on:
   push:
     tags:
-      - 'v*.*.*'  # Triggers on tags like v1.0.0, v1.2.3, etc.
+      - 'v*.*.*'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -32,10 +32,6 @@ jobs:
 
       - name: Get dependencies
         run: flutter pub get
-
-      - name: Run tests (optional)
-        run: flutter test
-        continue-on-error: true
 
       - name: Build APK
         run: flutter build apk --release

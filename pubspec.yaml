@@ -36,11 +36,11 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.14.4
-  # flutter_native_splash removed from CI dependencies — it conflicts with
-  # flutter_test's pinned path 1.9.0. The generated splash screen files are
-  # already committed to the repo so this package is not needed at build time.
-  # Run it locally with: dart run flutter_native_splash:create
+  # flutter_native_splash is intentionally excluded from CI — it conflicts with
+  # flutter_test's pinned path dependency. The generated splash files are already
+  # committed. To regenerate locally: dart run flutter_native_splash:create
 
 flutter:
   uses-material-design: true
